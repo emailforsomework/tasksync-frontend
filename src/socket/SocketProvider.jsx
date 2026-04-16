@@ -19,7 +19,13 @@ export function SocketProvider({ children }) {
       return;
     }
 
-    const socket = io(window.location.origin, {
+    // Derive socket URL from API URL (strip /api suffix if present)
+    const apiUrl = import.meta.env.VITE_API_URL || '';
+    const socketUrl = apiUrl.endsWith('/api') 
+      ? apiUrl.slice(0, -4) 
+      : (apiUrl || window.location.origin);
+
+    const socket = io(socketUrl, {
       auth: { token: accessToken },
       transports: ['websocket'],
     });
