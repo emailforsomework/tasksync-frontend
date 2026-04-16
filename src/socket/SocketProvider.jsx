@@ -38,20 +38,12 @@ export function SocketProvider({ children }) {
     // Instead of local mutation, we invalidate queries to ensure fresh, 
     // server-authoritative state across all clients.
     
-    socket.on('task:moved', ({ boardId }) => {
-      queryClient.invalidateQueries({ queryKey: ['tasks', boardId] });
-    });
-
-    socket.on('task:created', (task) => {
-      queryClient.invalidateQueries({ queryKey: ['tasks', task.boardId] });
-    });
-
-    socket.on('task:deleted', ({ boardId }) => {
-      queryClient.invalidateQueries({ queryKey: ['tasks', boardId] });
-    });
-
-    socket.on('task:updated', (task) => {
-      queryClient.invalidateQueries({ queryKey: ['tasks', task.boardId] });
+    // ─── Instant Sync: Direct Cache Patching ──────────────────────────────────
+    // This removes the need for a follow-up HTTP request, resulting in 
+    // near-zero latency updates across all devices.
+    socket.on('task:sync', ({ boardId, tasks }) => {
+      console.log('Realtime sync received for board:', boardId);
+      queryClient.setQueryData(['tasks', boardId], tasks);
     });
 
     socket.on('error', (msg) => {
