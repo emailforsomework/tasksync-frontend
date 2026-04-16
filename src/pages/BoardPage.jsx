@@ -103,15 +103,58 @@ export default function BoardPage() {
     }
   };
 
+  // ─── Mutations ──────────────────────────────────────────────────────────────
+  const createTaskMutation = useMutation({
+    mutationFn: createTask,
+    onMutate: async (newTaskData) => {
+      // Cancel any outgoing refetches (so they don't overwrite our optimistic update)
+      await queryClient.cancelQueries({ queryKey: ['tasks', boardId] });
+
+      // Snapshot the previous value
+      const previousTasks = queryClient.getQueryData(['tasks', boardId]);
+
+      // Optimistically update to the new value
+      const optimisticTask = {
+        _id: 'temp-id-' + Date.now(),
+        ...newTaskData,
+        position: tasks.filter(t => t.status === newTaskData.status).length,
+        isOptimistic: true,
+      };
+
+      queryClient.setQueryData(['tasks', boardId], (old = []) => [...old, optimisticTask]);
+
+      // Return a context object with the snapshotted value
+      return { previousTasks };
+    },
+    onError: (err, newTaskData, context) => {
+      // If the mutation fails, use the context returned from onMutate to roll back
+      queryClient.setQueryData(['tasks', boardId], context.previousTasks);
+      alert('Failed to create task. Please try again.');
+    },
+    onSettled: () => {
+      // Always refetch after error or success to keep server sync
+      queryClient.invalidateQueries({ queryKey: ['tasks', boardId] });
+    },
+  });
+
   // ─── Task Management ────────────────────────────────────────────────────────
-  const handleSaveTask = async (e) => {
+  const handleSaveTask = (e) => {
     e.preventDefault();
     if (!newTask.title.trim()) return;
-    try {
-      await createTask({ boardId, title: newTask.title, description: newTask.description, status: targetColumn });
-      setShowAddTask(false);
-      setNewTask({ title: '', description: '' });
-    } catch (err) { alert('Failed to create task'); }
+
+    // Close modal instantly (Optimistic UX)
+    setShowAddTask(false);
+    
+    // Trigger mutation
+    createTaskMutation.mutate({ 
+      boardId, 
+      title: newTask.title, 
+      description: newTask.description, 
+      status: targetColumn 
+    });
+
+    // Reset form
+    setNewTask({ title: '', description: '' });
   };
 
   const handleDeleteTask = async (taskId) => {
