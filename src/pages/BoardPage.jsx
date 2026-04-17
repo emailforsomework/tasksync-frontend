@@ -5,12 +5,19 @@ import {
   DndContext, 
   DragOverlay, 
   PointerSensor, 
+  TouchSensor,
+  KeyboardSensor,
   useSensor, 
   useSensors, 
   closestCorners,
   defaultDropAnimationSideEffects
 } from '@dnd-kit/core';
-import { arrayMove, SortableContext } from '@dnd-kit/sortable';
+import { 
+  arrayMove, 
+  SortableContext, 
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy 
+} from '@dnd-kit/sortable';
 import { getBoardById, inviteMember } from '../services/boardService';
 import { getTasksByBoard, moveTask, createTask, deleteTask } from '../services/taskService';
 import { useSocket } from '../socket/SocketProvider';
@@ -56,7 +63,16 @@ export default function BoardPage() {
   // ─── Drag & Drop Sensors ────────────────────────────────────────────────────
   const sensors = useSensors(
     useSensor(PointerSensor, {
-      activationConstraint: { distance: 8 }
+      activationConstraint: { distance: 5 } // Smaller threshold
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: { 
+        delay: 250, // Long press for mobile
+        tolerance: 5 
+      }
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
     })
   );
 
@@ -80,8 +96,9 @@ export default function BoardPage() {
 
     if (!activeData || activeData.type !== 'Task') return;
 
-    let destStatus = activeData.task.status;
-    let newPosition = 0;
+    const sourceStatus = activeData.task.status;
+    let destStatus = sourceStatus;
+    let newPosition = activeData.task.position;
 
     if (overData.type === 'Column') {
       destStatus = overData.columnId;
@@ -93,13 +110,38 @@ export default function BoardPage() {
       newPosition = columnTasks.findIndex(t => t._id === overId);
     }
 
-    if (destStatus === activeData.task.status && newPosition === activeData.task.position) return;
+    if (destStatus === sourceStatus && newPosition === activeData.task.position) return;
+
+    // ─── Optimistic Update ──────────────────────────────────────────────────
+    const previousTasks = queryClient.getQueryData(['tasks', boardId]);
+    
+    // Create new list with the task moved
+    const updatedTasks = [...tasks];
+    const taskIndex = updatedTasks.findIndex(t => t._id === activeId);
+    if (taskIndex !== -1) {
+      const [movedTask] = updatedTasks.splice(taskIndex, 1);
+      
+      // Update its status
+      const updatedTask = { ...movedTask, status: destStatus, position: newPosition };
+      
+      // We'll let the server handle precise re-ordering of others, 
+      // but for instant feedback, we just place it in the right column list.
+      // This logic here is simplified for the list; 
+      // the real re-ordering is complex, so we just update the specific task's status for the UI.
+      updatedTasks.push(updatedTask);
+      
+      queryClient.setQueryData(['tasks', boardId], updatedTasks);
+    }
 
     try {
       await moveTask(activeId, destStatus, newPosition);
+      // Invalidate to ensure consistency with server's complex sorting
+      queryClient.invalidateQueries({ queryKey: ['tasks', boardId] });
     } catch (err) {
       console.error('Failed to move task:', err);
-      queryClient.invalidateQueries({ queryKey: ['tasks', boardId] });
+      // Rollback
+      queryClient.setQueryData(['tasks', boardId], previousTasks);
+      alert('Failed to move task. Reverting...');
     }
   };
 
