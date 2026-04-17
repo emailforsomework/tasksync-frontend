@@ -41,17 +41,7 @@ export function Column({ id, title, tasks, onAddTask, onDeleteTask }) {
 
       <button 
         onClick={() => onAddTask(id)}
-        style={{ 
-          width: '100%', 
-          marginTop: '1rem', 
-          background: 'rgba(255,255,255,0.05)', 
-          textAlign: 'left',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '0.5rem',
-          fontSize: '0.85rem'
-        }}
-        className="btn-add-task hover-primary"
+        className="btn-add-task"
       >
         <Plus size={16} /> Add Task
       </button>
