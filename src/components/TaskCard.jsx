@@ -41,7 +41,6 @@ export function TaskCard({ task, onDelete }) {
         </div>
         <button 
           onClick={() => onDelete(task._id)}
-          style={{ padding: '0.25rem', background: 'transparent', color: 'var(--text-muted)' }}
           className="hover-danger"
         >
           <Trash2 size={14} />
